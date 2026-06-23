@@ -103,6 +103,26 @@ Flag only framing issues that affect the exported episode:
 
 Each warning should link back to the moment and preview surface where the creator can fix it.
 
+## Audio Cleanup Warnings
+
+When speech clarity, loudness balance, or conversation cleanup would affect the exported episode, readiness should surface audio issues as part of the existing quality pass rather than as a separate waveform editor.
+
+| Warning type | Source spec | Relevant section |
+| --- | --- | --- |
+| room noise, loudness balance, and clarity | `docs/audio-caption-quality-review.md` | Audio Controls, Review Flow |
+| awkward pauses and heavy cross-talk | `docs/pause-crosstalk-cleanup.md` | Detected Moments, Cleanup Actions |
+| per-speaker source audio problems | `docs/source-media-health.md` | Health Checks, Readiness Summary |
+| checklist blocking | `docs/publish-checklist.md` | Checklist Item Mapping, Review Approvals |
+
+Flag only audio issues that affect the exported episode:
+
+- one speaker is much louder or quieter than the others
+- room noise or hum stays loud enough to distract from speech
+- cross-talk makes a needed answer hard to understand
+- long dead air remains where the conversation stops
+- a confirmed clarity or noise fix was not applied before this export
+
+Each warning should link back to the speaker and moment where the creator can fix it, such as audio review, pause and cross-talk cleanup, or source media health. Music that covers speech stays with Placed Cue Warnings above, and natural pauses or intentional silence the creator chose to keep should not affect readiness.
 ## Contextual Visual Warnings
 
 When b-roll, overlays, or title moments would affect the exported episode, readiness should surface visual approval gaps as part of contextual review rather than as a separate effects queue.
