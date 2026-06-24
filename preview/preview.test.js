@@ -55,6 +55,20 @@ assert.ok(
   html.includes("Optional b-roll can be added later"),
   "preview shell treats b-roll as optional in the layout-first handoff",
 );
+assert.match(
+  html,
+  /class="slot-file" type="file" accept="video\/\*" data-file-input="host"/,
+  "preview canvas accepts a real uploaded host video, not only the sample track",
+);
+assert.match(
+  html,
+  /function placeVideoFile/,
+  "preview canvas places real uploaded/synced video files into layout slots",
+);
+assert.ok(
+  html.includes("same video is in more than one speaker slot"),
+  "preview canvas flags duplicate speaker recordings as invalid media assignments",
+);
 
 for (const step of flowSteps) {
   assert.ok(html.includes(step), `preview shell links to ${step}`);

@@ -369,6 +369,49 @@
         outline-offset: 2px;
       }
 
+      .slot-file {
+        position: relative;
+        z-index: 2;
+        margin-top: 10px;
+        max-width: 100%;
+        color: #ffffff;
+        font-size: 12px;
+      }
+
+      .slot-file:focus-visible {
+        outline: 2px solid #ffffff;
+        outline-offset: 2px;
+      }
+
+      .placed-video {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .placed-video video {
+        width: 100%;
+        max-height: 96px;
+        border-radius: 8px;
+        background: #000000;
+        object-fit: cover;
+      }
+
+      .placed-video .placed-label {
+        display: inline-flex;
+        width: fit-content;
+        align-items: center;
+        min-height: 28px;
+        border-radius: 999px;
+        background: rgba(223, 245, 239, 0.96);
+        color: #075246;
+        font-size: 12px;
+        font-weight: 800;
+        padding: 0 10px;
+      }
+
       .canvas-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -521,7 +564,7 @@
         <div class="canvas-grid">
           <div>
             <h2 class="canvas-title" id="canvas-title">Example podcast layout canvas</h2>
-            <p class="canvas-lede">Start with a concrete long-form episode composition: drag the host and guest into their video slots, keep the title and captions readable, and reserve a dedicated drop zone for b-roll moments.</p>
+            <p class="canvas-lede">Start with a concrete long-form episode composition: drop a real host and guest video into their slots (or drag the sample tracks), keep the title and captions readable, and reserve a dedicated drop zone for b-roll moments.</p>
             <div class="track-palette" aria-label="Drag speaker tracks onto the layout, or focus one and press Enter to place it">
               <span class="drag-chip" draggable="true" data-track="host" tabindex="0" role="button" aria-keyshortcuts="Enter Space">Host track · Dana Brooks</span>
               <span class="drag-chip" draggable="true" data-track="guest" tabindex="0" role="button" aria-keyshortcuts="Enter Space">Guest track · Marcus Lee</span>
@@ -537,11 +580,13 @@
               <div class="speaker-row">
                 <div class="drop-zone host" data-slot="host">
                   <span class="slot-label">Host video slot</span>
-                  <span class="slot-note">Drop the host Riverside track here. Keep room for captions and chapter callouts.</span>
+                  <span class="slot-note">Drop the host video file here, or choose one. Keep room for captions and chapter callouts.</span>
+                  <input class="slot-file" type="file" accept="video/*" data-file-input="host" aria-label="Choose host video file">
                 </div>
                 <div class="drop-zone guest" data-slot="guest">
                   <span class="slot-label">Guest video slot</span>
-                  <span class="slot-note">Drop the guest track here, matched to framing and safe-area rules.</span>
+                  <span class="slot-note">Drop the guest video file here, or choose one, matched to framing and safe-area rules.</span>
+                  <input class="slot-file" type="file" accept="video/*" data-file-input="guest" aria-label="Choose guest video file">
                 </div>
               </div>
               <div class="canvas-footer">
@@ -552,6 +597,7 @@
                 <div class="title-slot drop-zone broll" data-slot="broll">
                   <span class="slot-label">B-roll drop zone</span>
                   <div class="slot-note">Place contextual visuals, title cards, or screen shares without hiding the conversation.</div>
+                  <input class="slot-file" type="file" accept="video/*" data-file-input="broll" aria-label="Choose optional b-roll video file">
                 </div>
               </div>
             </div>
@@ -1003,6 +1049,33 @@
           broll: "B-roll clip · intro beat",
         };
 
+        // Real uploaded/synced media: alongside the sample track chips, each slot accepts an
+        // actual video file (dropped from the desktop or chosen with its file input), so the
+        // preview canvas places real media into the layout rather than only an internal
+        // example (#1131). Object URLs are tracked so they can be revoked on remove/reset.
+        var objectUrls = [];
+        var urlApi = (typeof URL !== "undefined")
+          ? URL
+          : (typeof window !== "undefined" && window.URL) ? window.URL : null;
+
+        function isVideoFile(file) {
+          return Boolean(file && typeof file.type === "string" && file.type.indexOf("video/") === 0);
+        }
+
+        // A stable identity for a placed recording. Display name alone is not enough: separate
+        // speaker recordings are often exported with the same name, so we key on name + size +
+        // modified time. With neither size nor time we return "" and never claim a duplicate.
+        function fileSignature(file) {
+          if (!file) return "";
+          var hasSize = file.size !== undefined && file.size !== null;
+          var hasTime = file.lastModified !== undefined && file.lastModified !== null;
+          if (!hasSize && !hasTime) return "";
+          var parts = ["name:" + (file.name || "")];
+          if (hasSize) parts.push("size:" + file.size);
+          if (hasTime) parts.push("mtime:" + file.lastModified);
+          return parts.join("|");
+        }
+
         document.querySelectorAll(".drag-chip").forEach(function (chip) {
           chip.addEventListener("dragstart", function (event) {
             event.dataTransfer.setData("text/plain", chip.dataset.track);
@@ -1076,9 +1149,30 @@
           });
         }
 
+        // The same recording in both speaker slots would put one person in two frames, so it
+        // is not a valid set of media assignments. Compare file identity (see fileSignature),
+        // not display name, and return the names of any speaker slots that repeat a recording.
+        function duplicateFileNames() {
+          var seen = {};
+          var duplicates = [];
+          ["host", "guest"].forEach(function (slot) {
+            var zone = document.querySelector('.drop-zone[data-slot="' + slot + '"]');
+            if (!zone || !zone.classList.contains("filled")) return;
+            var sig = (zone.dataset.fileSig || "").trim();
+            if (!sig) return;
+            if (seen[sig]) {
+              var name = (zone.dataset.fileName || "").trim() || sig;
+              if (duplicates.indexOf(name) === -1) duplicates.push(name);
+            } else {
+              seen[sig] = true;
+            }
+          });
+          return duplicates;
+        }
+
         function updateContinueLink(filled) {
           if (!continueLink) return;
-          if (filled === 2) {
+          if (filled === 2 && duplicateFileNames().length === 0) {
             continueLink.href = "./app.html#speaker-role-mapping?path=episode";
             continueLink.setAttribute("aria-disabled", "false");
             continueLink.textContent = "Continue to speaker roles →";
@@ -1104,6 +1198,11 @@
             slotStatus.textContent = message;
             return;
           }
+          if (duplicateFileNames().length > 0) {
+            slotStatus.textContent =
+              "The same video is in more than one speaker slot. Give each speaker a separate recording before you continue.";
+            return;
+          }
           var filled = requiredFilledCount();
           if (filled === 2) {
             slotStatus.textContent = "Required speaker videos ready. " + optionalBrollCopy();
@@ -1112,12 +1211,86 @@
           slotStatus.textContent = filled + " of 2 required speaker videos ready. " + optionalBrollCopy();
         }
 
+        function revokeZoneUrl(zone) {
+          var url = zone.dataset.objectUrl;
+          if (url && urlApi && typeof urlApi.revokeObjectURL === "function") {
+            urlApi.revokeObjectURL(url);
+          }
+          zone.dataset.objectUrl = "";
+          objectUrls = objectUrls.filter(function (candidate) { return candidate !== url; });
+        }
+
+        function ensureRemoveButton(zone, label) {
+          var remove = zone.querySelector(".placed-remove");
+          if (!remove) {
+            remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "placed-remove";
+            remove.textContent = "Remove";
+            remove.addEventListener("click", function (event) {
+              if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+              removeTrack(zone);
+            });
+            zone.appendChild(remove);
+          }
+          remove.setAttribute("aria-label", "Remove " + label);
+          return remove;
+        }
+
+        // Place a real uploaded/synced video into a slot: render the actual file, mark the slot
+        // filled, and record its identity so duplicates and readiness stay accurate. A non-video
+        // file surfaces the same creator-facing hint as any invalid assignment.
+        function placeVideoFile(zone, file) {
+          if (!zone) return;
+          if (!isVideoFile(file)) {
+            updateSlotStatus("Add an MP4, MOV, or WebM video file to that slot.");
+            return;
+          }
+          revokeZoneUrl(zone);
+          var staleTrack = zone.querySelector(".placed-track");
+          if (staleTrack) staleTrack.remove();
+          var staleVideo = zone.querySelector(".placed-video");
+          if (staleVideo) staleVideo.remove();
+          zone.classList.add("filled");
+          zone.dataset.fileName = file.name || "";
+          zone.dataset.fileSig = fileSignature(file);
+
+          var wrap = document.createElement("div");
+          wrap.className = "placed-video";
+          var video = document.createElement("video");
+          video.controls = true;
+          video.muted = true;
+          if (urlApi && typeof urlApi.createObjectURL === "function") {
+            var url = urlApi.createObjectURL(file);
+            objectUrls.push(url);
+            zone.dataset.objectUrl = url;
+            video.src = url;
+          }
+          var label = document.createElement("span");
+          label.className = "placed-label";
+          label.textContent = file.name || "Video ready";
+          wrap.appendChild(video);
+          wrap.appendChild(label);
+          zone.insertBefore(wrap, zone.firstChild);
+          ensureRemoveButton(zone, file.name || "video");
+          updateSlotStatus();
+        }
+
         // Shared by drag-and-drop and keyboard activation. A track only fits its own slot;
         // a mismatch surfaces the same creator-facing hint as a bad drop.
         function placeTrack(zone, track) {
           if (!zone || track !== zone.dataset.slot) {
             updateSlotStatus("That track belongs in a different slot.");
             return;
+          }
+          // Placing a sample track over a real video clears the video (and its object URL)
+          // first, so a slot never shows both a placed file and an example chip at once.
+          var existingVideo = zone.querySelector(".placed-video");
+          if (existingVideo) {
+            existingVideo.remove();
+            revokeZoneUrl(zone);
+            zone.dataset.fileName = "";
+            zone.dataset.fileSig = "";
           }
           zone.classList.add("filled");
           var placed = zone.querySelector(".placed-track");
@@ -1151,6 +1324,11 @@
           zone.classList.remove("filled");
           var placed = zone.querySelector(".placed-track");
           if (placed) placed.remove();
+          var placedVideo = zone.querySelector(".placed-video");
+          if (placedVideo) placedVideo.remove();
+          revokeZoneUrl(zone);
+          zone.dataset.fileName = "";
+          zone.dataset.fileSig = "";
           var remove = zone.querySelector(".placed-remove");
           if (remove) remove.remove();
           updateSlotStatus();
@@ -1174,7 +1352,22 @@
           zone.addEventListener("drop", function (event) {
             event.preventDefault();
             zone.classList.remove("drag-over");
+            // A real dropped video file takes priority; fall back to a dragged sample track.
+            var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+            if (file) {
+              placeVideoFile(zone, file);
+              return;
+            }
             placeTrack(zone, event.dataTransfer.getData("text/plain"));
+          });
+        });
+
+        // Choosing a file with a slot's input places real media without a drag, so the canvas
+        // is usable on touch and with the keyboard, not only by dragging.
+        document.querySelectorAll(".slot-file").forEach(function (input) {
+          input.addEventListener("change", function () {
+            var zone = document.querySelector('.drop-zone[data-slot="' + input.dataset.fileInput + '"]');
+            placeVideoFile(zone, input.files && input.files[0]);
           });
         });
 
@@ -1184,6 +1377,11 @@
               zone.classList.remove("filled");
               var placed = zone.querySelector(".placed-track");
               if (placed) placed.remove();
+              var placedVideo = zone.querySelector(".placed-video");
+              if (placedVideo) placedVideo.remove();
+              revokeZoneUrl(zone);
+              zone.dataset.fileName = "";
+              zone.dataset.fileSig = "";
               var remove = zone.querySelector(".placed-remove");
               if (remove) remove.remove();
             });
