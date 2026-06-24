@@ -865,7 +865,10 @@
       }
 
       function activeEffects() {
-        return choices.filter((choice) => enabled.has(choice.id)).map((choice) => choice.effect);
+        return choices
+          .filter((choice) => enabled.has(choice.id))
+          .map((choice) => choice.effect)
+          .filter((effect) => typeof effect === "string" && effect.length);
       }
 
       function waveMarkup(heights, cleaned) {
